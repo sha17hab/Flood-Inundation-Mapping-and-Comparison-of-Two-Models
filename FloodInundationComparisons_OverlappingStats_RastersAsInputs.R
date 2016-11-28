@@ -45,7 +45,6 @@ library("sp")
 ## a different color) than intersecting region. RMSE (or MSE) will be computed considering
 ## intersecting and non-intersecting regions. 
 
-rm(list=setdiff(ls(),c("S1","myImagePlot")))
 #############################################################
 # The Script:
 
