@@ -49,20 +49,17 @@ library("sp")
 # The Script:
 
 ## 1)
-setwd("/Volumes/RAID1-2TB/virtualbox_shahab/Paper - MultiModelComaprison/NFIE_data/NWM_Geospatial_data/Data To Be Shared with the Team/InundationResults_Rasters/")
+## set the working directory via setwd()
 
 #### 1-1) Importing Inundation Depth Raster Images based on 
 #### the percentage of wetted, dry, and NA cells. 
 
 #load raster in an R object called 'DEM'
-#raster("Model-1.tif")
-DEM_Flood1_0 = raster("HECRAS2D/100yrFlood/MaxDepth_NED_25m_LMn_DT1min_100yr.tif") 
-#raster("Model-2.tif")
-DEM_Flood2_0 = raster("AutoRoute_Rasters/Depth_10mned_WholeTusc_100yr_hybrid_clip.tif") 
-DEM_Flood2_0 = raster("HANDFloodmap_Xing/HANDFloodmap/NED/FP_100.tif") 
-#raster("TerrainModel.tif")
-DEM_Terrain = raster("/Volumes/RAID1-2TB/virtualbox_shahab/Paper - MultiModelComaprison/NFIE_data/NWM_Geospatial_data/Data To Be Shared with the Team/DEMs/Inputs/10-19-2016-Shahab-10mNEDLev/10-19-2016-Shahab-UTM-10mNEDLev-meter.tif") 
-
+DEM_Flood1_0 = raster("Model-1.tif")
+DEM_Flood2_0 = raster("Model-2.tif")
+DEM_Terrain = raster("TerrainModel.tif")
+model1="Name of Model 1"
+model2="Name of Model 2"
 ### NOTE: the extent of "TerrainModel" raster is the baseline, that is, 
 ###       the cells of "Model-1" and "Model-2" which are being mapped
 ###       beyond the baseline extent will be omitted/clipped
@@ -310,10 +307,7 @@ print(pvalue) # if pvalue > 0.05, then Kappa is statistically equal to 1 (i.e. N
 # otherwise there is not enough evidence to accept it to be 1
 
 ### 4-3) Visual comparison of "Flood Model 1" vs "Flood Model 2"
-
-model1="RAS2D"
-model2="HAND"
-pdf(paste0("ModelComparisonR/",model1,"VS",model2,".pdf"),paper = "USr",width = 10,height = 10)
+pdf(paste0(model1,"VS",model2,".pdf"),paper = "USr",width = 10,height = 10)
 #add a color map with 5 colors
 col=c("#EEE9BF","#00EEEE","#F08080","#1874CD","#1874CD")
 #add breaks to the colormap (6 breaks = 5 segments)
@@ -371,13 +365,13 @@ options(warn = oldw)
 ### 5-5) write to a new geotiff file (depends on rgdal)
 
 writeRaster(DEM_FloodDepthIntersect, 
-            filename=paste0("ModelComparisonR/",model1,"VS",model2,"_intersect",".tif"),
+            filename=paste0(model1,"VS",model2,"_intersect",".tif"),
             format="GTiff", overwrite=TRUE)
 writeRaster(DEM_FloodDepthClassified_1, 
-            filename=paste0("ModelComparisonR/",model1,".tif"), 
+            filename=paste0(model1,".tif"), 
             format="GTiff", overwrite=TRUE)
 writeRaster(DEM_FloodDepthClassified_2, 
-            filename=paste0("ModelComparisonR/",model2,".tif"), 
+            filename=paste0(model2,".tif"), 
             format="GTiff", overwrite=TRUE)
 
 par(mfrow=c(1,2))
