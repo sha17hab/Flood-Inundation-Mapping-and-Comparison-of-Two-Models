@@ -10,33 +10,45 @@
 # visual comparison and computed inundation statistics (e.g. F-overlapping statistics, 
 # Kappa-statistics, etc.)
 #
-# Requirements: "raster", "rgdal", and "sp" packages.
+# Requirements: "raster", "rgdal", "sp", "rgeos", "maptool", "SDMTools", and "tcltk" packages.
 install.packages("raster")
-library("raster")
+library("raster") # Geographic Data Analysis and Modeling
 install.packages("rgdal")
-library("rgdal")
+library("rgdal") # Binding for the Geospatial Data Abstraction Library
 install.packages("sp")
-library("sp")
+library("sp") # Sparse Linear Algebra
+install.packages("rgeos")
+library("rgeos") # Interface to Geometry Engine - Open Source (GEOS)
+install.packages("maptools")
+library("maptools") # Tools for Reading and Handling Spatial Objects
+install.packages("SDMTools")
+library("SDMTools") # Species Distribution Modelling Tools
+library("tcltk") # Tcl/Tk Interface
 
-# How to use the script:
+# The script Introduction:
 ##
 ## The following script is made up of input assignment followed by
 ## the computation over the inputs.
 ##
 ## The user should import three ".tif" raster images as inputs,
 ## indicating: 1) flood inundation depth produced by model-1, 2) flood inundation
-## depth produced by model-2, and 3) terrain model 
+## depth produced by model-2, and 3) the terrain model 
 ##
 ## Assessment over the inputs will be made through two following approaches:
 ## 1) producing inundation maps and inter-comparison of inundation extent
 ## of model-1 with model-2 applying inundation statistics; The original raster 
 ## image while cell values are representing different ranges of depth will 
 ## be converted to a solid raster image where all cells will be modified to 
-## have a uniform single value. (i.e. concerning model-1, -2 and terrain raster, all 
+## have a uniform single value. (i.e. concerning model-1, -2 and the terrain raster, all 
 ## the raster cell values will be converted to 1, 2, and 0 respectively) 
 ## "Overall Accuracy Statistics", "F-overlapping Statistics", "Kappa Statistics", 
 ## and "Conditional Kappa Statistics" along with test of significance are being
-## applied for evaluating the comparison of the modified versions of model-1, -2, terrain rasters.
+## applied for evaluating the difference between the modified versions of model-1 and model-2 
+## over the terrain. The model comparison results are being provided as: 1. a PDF file, containing
+## schematic view of models intersecting inundated region along with ones being inundated by one model
+## while being reported as dry by the other; 2. three Shapefile polygons, one representing models 
+## intersecting inundated region and two additional shapefile each representing regions being 
+## inundated by one model while being reported as dry by the other model.
 ##
 ## 2) comparison of the original inundation depth maps; taking the arithmetic 
 ## difference between the two models (1 and 2) where the intersecting region will 
@@ -55,13 +67,50 @@ library("sp")
 #### the percentage of wetted, dry, and NA cells. 
 
 #load raster in an R object called 'DEM'
-DEM_Flood1_0 = raster("Model-1.tif")
-DEM_Flood2_0 = raster("Model-2.tif")
-DEM_Terrain = raster("TerrainModel.tif")
-model1="Name of Model 1"
-model2="Name of Model 2"
+## Choose a TIFF (*.tif) image as the first inundation depth/extent , "Model-1.tif"
+DEM_Flood1_0 = raster(tk_choose.files(caption = "Choose a TIFF (*.tif) image as the first inundation depth/extent"))
+## Choose a TIFF (*.tif) Image as the second inundation depth/extent, "Model-2.tif"
+DEM_Flood2_0 = raster(tk_choose.files(caption = "Choose a TIFF (*.tif) image as the second inundation depth/extent")) 
+## Choose a TIFF (*.tif) Image as terrain model, "TerrainModel.tif"
+DEM_Terrain = raster(tk_choose.files(caption = "Choose a TIFF (*.tif) Image as terrain model")) 
+mainDir = setwd(tk_choose.dir(caption="Choose working directory"))#setwd("/Volumes/RAID1-2TB/virtualbox_shahab/Paper - MultiModelComaprison/RStudioCodes/") # Choose a working directory
+# select a shapefile (*.shp) containing the user's required coordinate reference (or the projection
+# ), e.g. GCS 1983 coordinate system, to be applied for exporting inundation maps as shapefiles possessing
+# the just assigned coordinate system
+Shapefile_as_Coordinate_Ref = shapefile(tk_choose.files(caption = "Select a shapefile (*.shp) containing the user's required coordinate reference ")) 
+model1="Name_of_Model_1" # Assign a label name representing "Model-1.tif"
+model2="Name_of_Model_2" # Assign a label name representing "Model-2.tif"
+
+subDir_counter_Shp = 0
+subDir_counter_PDF = 0
+subDir_counter_TIFF = 0
+
+subDir_Shp = "Shapefiles"
+if (!file.exists(subDir_Shp)){
+  dir.create(file.path(mainDir, subDir_Shp))
+} else {
+  subDir_counter_Shp = subDir_counter_Shp+1
+  dir.create(file.path(mainDir, paste0(subDir_Shp,subDir_counter_Shp)))
+}
+
+subDir_PDF = "PDFs"
+if (!file.exists(subDir_PDF)){
+  dir.create(file.path(mainDir, subDir_PDF))
+} else {
+  subDir_counter_PDF = subDir_counter_PDF+1
+  dir.create(file.path(mainDir, paste0(subDir_PDF,subDir_counter_PDF)))
+}
+
+subDir_TIFF = "TIFFs"
+if (!file.exists(subDir_TIFF)){
+  dir.create(file.path(mainDir, subDir_TIFF))
+} else {
+  subDir_counter_TIFF = subDir_counter_TIFF+1
+  dir.create(file.path(mainDir, paste0(subDir_TIFF,subDir_counter_TIFF)))
+}
+
 ### NOTE: the extent of "TerrainModel" raster is the baseline, that is, 
-###       the cells of "Model-1" and "Model-2" which are being mapped
+###       the cells of "Model-1" and "Model-2" if being mapped
 ###       beyond the baseline extent will be omitted/clipped
 
 #### 1-2) cell resolution and projection comparison and adjustment; 
@@ -92,6 +141,7 @@ if ((origin(DEM_Flood2)[1] != origin(DEM_Terrain)[1]) | (origin(DEM_Flood2)[2] !
   origin(DEM_Flood2) = origin(DEM_Terrain)
 rm(DEM_Flood2_0);rm(DEM_Flood1_0)
 
+### UNCOMMENT THE LINES BELOW IF THE CELL RESOLUTIONS ARE INCONSISTENT
 # cell resolution comparison; raster image having lower resolution will be resampled
 # to the spatial resolution similar to finer resolution raster. 
 # if (res(DEM_Flood1_0)[1]!=res(DEM_Flood2_0)[1]) {
@@ -117,14 +167,14 @@ rm(DEM_Flood2_0);rm(DEM_Flood1_0)
 # fun4: given the raster image (representing flood depth): 1. it will convert
 # cells having zero z-values (i.e. zero depth) to NA, 2. converting non-NA cells 
 # to 1, and 3. NA values (where also have been added from step 1) to 0
-fun0 = function(x){ x[x==0] = NA; return(x) }
+fun0 = function(x){ x[x<=0] = NA; return(x) }
 fun1 = function(x) { x[!is.na(x)] = 1; x[is.na(x)] = 0;return(x) }
 fun2 = function(x){ x[!is.na(x)] = 0; return(x) }
 fun3_union = function(x){ x[x==1|x==2|x==3] = 1; return(x) }
 fun3_1 = function(x){ x[x==0|x==2|x==3] = NA; x[x==1] = 0; return(x) }
 fun3_2 = function(x){ x[x==0|x==1|x==3] = NA; x[x==2] = 0; return(x) }
 fun3_3 = function(x){ x[x==0|x==1|x==2] = NA; x[x==3] = 0; return(x) }
-fun4 = function(x){ x[x==0] = NA; x[!is.na(x)] = 1; x[is.na(x)] = 0; return(x) }
+fun4 = function(x){ x[x<=0] = NA; x[!is.na(x)] = 1; x[is.na(x)] = 0; return(x) }
 
 #############################################################
 ## 3)
@@ -137,6 +187,7 @@ DEM_Flood1 = setMinMax(DEM_Flood1)
 DEM_Flood2 = setMinMax(DEM_Flood2)
 DEM_Terrain = setMinMax(DEM_Terrain)
 
+### UNCOMMENT THE LINES BELOW IF THE CELL RESOLUTIONS ARE INCONSISTENT
 # DEM_Flood1 = resample(DEM_Terrain, DEM_Flood1, method="ngb")
 # DEM_Flood2 = resample(DEM_Terrain, DEM_Flood2, method="ngb")
 # DEM_Flood2 = calc(DEM_Flood2,fun4)
@@ -148,10 +199,7 @@ options(warn = -1)
 DEM_FloodClassified = calc(DEM_Flood1, fun1)+
   calc(DEM_Flood2, fun1)*2+
   calc(DEM_Terrain,fun2) 
-# DEM_FloodClassified0 = calc(DEM_Flood1, fun1)+
-#   calc(DEM_Flood2, fun4)*2+
-#   calc(DEM_Terrain,fun2) 
-# plot(calc(DEM_Flood2,fun4))
+
 ### 3-2) Union of flood raster layers, 0 being the union and NA as non-flooded zones 
 DEM_FloodUnion = calc(DEM_FloodClassified,fun3_union)
 
@@ -178,7 +226,7 @@ S1 = as.matrix(DEM_FloodClassified)
 # 1: Only flooded by "Model-1.tif" ("DEM_Flood1")
 # 2: Only flooded by "Model-2.tif" ("DEM_Flood2")
 # 3: Flooded both by "Model-1.tif" and "Model-2.tif" ("DEM_Flood1" and "DEM_Flood2")
-plot(DEM_FloodClassified, main="Digital Elevation Model")
+#plot(DEM_FloodClassified, main="Digital Elevation Model")
 #we can look at the distribution of values in the raster too
 S1_dum = S1[which(!is.na(S1)==T)]
 library(lattice)
@@ -253,7 +301,7 @@ n2_S1dry_AND_S2wet = length(which(S==2)) # S1 is dry and S2 is wet
 
 ### Z-statistics computed for Conditional Kappa
 m = matrix(0,ncol=NumCol,nrow=NumRow)
-partition_frame_size = 780 # number of cell in a row or column
+partition_frame_size = NumRow-10 # number of cell in a row or column ()
 Kappa_hat_statistics_i = matrix(NA,
                                 nrow=(ncol(m)-partition_frame_size+1)*
                                   (nrow(m)-partition_frame_size+1),
@@ -307,7 +355,7 @@ print(pvalue) # if pvalue > 0.05, then Kappa is statistically equal to 1 (i.e. N
 # otherwise there is not enough evidence to accept it to be 1
 
 ### 4-3) Visual comparison of "Flood Model 1" vs "Flood Model 2"
-pdf(paste0(model1,"VS",model2,".pdf"),paper = "USr",width = 10,height = 10)
+pdf(paste0(file.path(mainDir, subDir_PDF),"/",model1,"VS",model2,".pdf"),paper = "USr",width = 10,height = 10)
 #add a color map with 5 colors
 col=c("#EEE9BF","#00EEEE","#F08080","#1874CD","#1874CD")
 #add breaks to the colormap (6 breaks = 5 segments)
@@ -318,7 +366,7 @@ par(xpd = FALSE,mar=c(5.1, 4.1, 4.1, 4.5))
 plot(DEM_FloodClassified, # Raster (having classified symbology)
      col=col, # Color of classes (domains)
      breaks=brk, # Number of breaks for legend's color bar
-     main="Flood over NED", # Plot title
+     main="Flood over the Assigned NED", # Plot title
      legend = FALSE) # Disabling the custom legend form to be added
 #turn xpd back on to force the legend to fit next to the plot.
 par(xpd = TRUE)
@@ -337,13 +385,28 @@ legend( par()$usr[2]-4500, #x-coordinate of upper-left corner of legend box
                    sprintf("Condi. Kappa Wet = %0.3f",CondiKappa_hat_statistics_wet),
                    sprintf("F-Overlapping = %0.3f",F_Overallping_Stat)),
         bty = "n",fill = "black",cex=1,pch=NA,title="Inundation Statistics")
+Scalebar(x=par()$usr[1]+500,par()$usr[3]+400,distance=4000,unit='km',scale=0.001)
+
 dev.off()
 
-# print(paste("Kappa=",Kappa_hat_statistics))
-# print(paste("Overal Accu.=",Overall_Accuracy))
-# print(paste("F-Overlapping=",F_Overallping_Stat))
-# print(paste("Condi. Kappa Wet=",CondiKappa_hat_statistics_wet))
-# print(paste("Condi. Kappa Dry=",CondiKappa_hat_statistics_dry))
+### 4-4) Exporting outline boundaries of rasters as .shp (shapefile)
+#### NOTE: The coordinate reference system (crs) of the exported shapefile will be set to that 
+#### of an existing shapefile based on the users' choice. Therefore, the reference shapefile must be
+#### imporated and assigned to "Shapefile_as_Coordinate_Ref" variable. 
+
+crs(Shapefile_as_Coordinate_Ref)
+# FloodIntersect
+pol_FloodIntersect = rasterToPolygons(DEM_FloodIntersect,dissolve = T)
+pol_FloodIntersect_trnsfm = spTransform(pol_FloodIntersect, crs(Shapefile_as_Coordinate_Ref))
+writeOGR(pol_FloodIntersect_trnsfm,dsn=".",layer=paste0(file.path(mainDir, subDir_Shp),"/",model1,"VS",model2,"_intersect"), driver="ESRI Shapefile")
+# FloodClassified 1
+pol_FloodClassified_1 = rasterToPolygons(DEM_FloodClassified_1,dissolve = T)
+pol_FloodClassified_1_trnsfm = spTransform(pol_FloodClassified_1, crs(Shapefile_as_Coordinate_Ref))
+writeOGR(pol_FloodClassified_1_trnsfm,dsn=".",layer=paste0(file.path(mainDir, subDir_Shp),"/",model1,"VS",model2,"_",model1), driver="ESRI Shapefile")
+# FloodClassified 2
+pol_FloodClassified_2 = rasterToPolygons(DEM_FloodClassified_2,dissolve = T)
+pol_FloodClassified_2_trnsfm = spTransform(pol_FloodClassified_2, crs(Shapefile_as_Coordinate_Ref))
+writeOGR(pol_FloodClassified_2_trnsfm,dsn=".",layer=paste0(file.path(mainDir, subDir_Shp),"/",model1,"VS",model2,"_",model2), driver="ESRI Shapefile")
 
 #############################################################
 ## 5) 
@@ -365,22 +428,18 @@ options(warn = oldw)
 ### 5-5) write to a new geotiff file (depends on rgdal)
 
 writeRaster(DEM_FloodDepthIntersect, 
-            filename=paste0(model1,"VS",model2,"_intersect",".tif"),
+            filename=paste0(file.path(mainDir, subDir_TIFF),
+                            "/",model1,"VS",model2,"_intersect",".tif"),
             format="GTiff", overwrite=TRUE)
 writeRaster(DEM_FloodDepthClassified_1, 
-            filename=paste0(model1,".tif"), 
+            filename=paste0(file.path(mainDir, subDir_TIFF),
+                            "/",model1,"VS",model2,"_",model1,".tif"), 
             format="GTiff", overwrite=TRUE)
 writeRaster(DEM_FloodDepthClassified_2, 
-            filename=paste0(model2,".tif"), 
+            filename=paste0(file.path(mainDir, subDir_TIFF),
+                            "/",model1,"VS",model2,"_",model2,".tif"), 
             format="GTiff", overwrite=TRUE)
 
-par(mfrow=c(1,2))
-plot(DEM_FloodDepthIntersect,col=rev(rainbow(10)))
-plot(DEM_FloodDepthClassified_1,add=T,legend=F,col=rev(heat.colors(10)))
-plot(DEM_FloodDepthClassified_2,add=T,legend=F,col=rev(bpy.colors(10)))
-hist(DEM_FloodDepthIntersect, main="Distribution of elevation values", 
-     col= "purple",
-     maxpixels=ncell(DEM_FloodDepthIntersect),prob=T)
-#############################################################
+####################### THIS IS THE ENDING LINE OF THE SCRIPT ######################
 
 
